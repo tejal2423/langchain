@@ -1,34 +1,8 @@
 import streamlit as st
-import requests
 import numpy as np
 import cv2
-import os
-from groq import Groq
 from PIL import Image
-
-# Constants
-REMINI_API_KEY = 'oxbd3InxqF16tNdjTxz1uSrp10BangIGTFJ7cEbPhDtCRlBc'
-REMINI_API_URL = 'https://api.remini.com/generate'
-GROQ_API_KEY = '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'
-
-# Initialize Groq client
-client = Groq(api_key=GROQ_API_KEY)
-
-# Function to call the Remini API
-def call_remini_api(input_text):
-    headers = {
-        'Authorization': f'Bearer {REMINI_API_KEY}',
-        'Content-Type': 'application/json'
-    }
-    data = {
-        'input_text': input_text
-    }
-    response = requests.post(REMINI_API_URL, json=data, headers=headers)
-    if response.status_code == 200:
-        return response.json().get('generated_text')
-    else:
-        st.error(f"Error fetching data: {response.text}")
-        return None
+from rembg import remove
 
 # Function to enhance the uploaded image
 def enhance_image(image):
@@ -46,34 +20,23 @@ def enhance_image(image):
     
     return enhanced_img_rgb
 
-# Function to generate text using Groq API
-def generate_text_groq(input_text):
-    chat_completion = client.chat.completions.create(
-        messages=[
-            {
-                "role": "user",
-                "content": input_text,
-            }
-        ],
-        model="llama3-8b-8192",
-    )
-    return chat_completion.choices[0].message.content
+# Function to change background of the image
+def change_background(image, background_image):
+    # Remove the background from the original image
+    img_no_bg = remove(np.array(image))
+    
+    # Convert images to PIL
+    img_no_bg_pil = Image.fromarray(img_no_bg)
+    background_pil = Image.open(background_image).resize(img_no_bg_pil.size)
+    
+    # Composite the images
+    img_with_bg = Image.alpha_composite(background_pil.convert("RGBA"), img_no_bg_pil.convert("RGBA"))
+    
+    return img_with_bg.convert("RGB")
 
 # Streamlit UI
-st.title("Reminiscence Generator, Photo Enhancer & Remini API")
-st.write("Enter a starting sentence to reminisce about, upload a photo to enhance, or use the Remini API!")
-
-# Text generation section
-st.header("Generate Reminiscence")
-user_input = st.text_input("Input your starting sentence:", key="text_input")
-
-if st.button("Generate Reminiscence"):
-    if user_input:
-        # Generate text based on user input using Groq
-        generated_text = generate_text_groq(user_input)
-        st.markdown(f"**Generated Reminiscence:** {generated_text}")
-    else:
-        st.warning("Please enter a starting sentence.")
+st.title("Photo Enhancer and Background Changer")
+st.write("Upload a photo to enhance or change its background!")
 
 # Image enhancement section
 st.header("Enhance Photo")
@@ -94,13 +57,18 @@ if uploaded_image is not None:
         # Display the enhanced image
         st.image(enhanced_image, caption="Enhanced Image", use_column_width=True)
 
-# API Call section
-st.header("Remini API")
-if st.button("Generate with Remini API"):
-    if user_input:
-        # Call Remini API to generate text based on user input
-        generated_text_api = call_remini_api(user_input)
-        if generated_text_api:
-            st.markdown(f"**Generated Text (via API):** {generated_text_api}")
-    else:
-        st.warning("Please enter a starting sentence.")
+    # Background change section
+    st.header("Change Background")
+    uploaded_bg_image = st.file_uploader("Upload a background image (JPG, JPEG, PNG)", type=["jpg", "jpeg", "png"], key="bg_image")
+    
+    if uploaded_bg_image is not None:
+        # Display the uploaded background image
+        st.image(uploaded_bg_image, caption="Background Image", use_column_width=True)
+        
+        # Check if change background button is clicked
+        if st.button("Change Background"):
+            # Change the background of the original image
+            result_image = change_background(image, uploaded_bg_image)
+            
+            # Display the image with the new background
+            st.image(result_image, caption="Image with New Background", use_column_width=True)
